@@ -4,6 +4,16 @@ using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
+    public static GameManager instance;
+
+    private void Awake()
+    {
+        if (instance == null)
+            instance = this;
+        else
+            Destroy(this.gameObject);
+    }
+
     public GameObject block;
     public GameObject lastBlock;
     public GameObject stackedBlock;
@@ -13,10 +23,23 @@ public class GameManager : MonoBehaviour
 
     public float error = 0.2f;
 
+    int currentCombo = 0;
+    int maxCombo;
+
+    bool isSizeUp = false;
+    Vector3 sizeUpVec = new Vector3(1.1f, 1, 1.1f);
+
+    public Color prevColor;
+    public Color nextColor;
+
+    public int score;
 
     void Start()
     {
-        
+        prevColor = RandomColor();
+        nextColor = RandomColor();
+        ChangeColor(stackedBlock);
+        UIManager.instance.SetScore(score);
     }
 
     void Update()
@@ -29,6 +52,8 @@ public class GameManager : MonoBehaviour
             if (!isGameOver)
             {
                 SpawnBlock();
+                score++;
+                UIManager.instance.SetScore(score);
                 Camera.main.transform.position = new Vector3(Camera.main.transform.position.x, 8 + spawnPosition, Camera.main.transform.position.z);
             }
             else
@@ -43,9 +68,19 @@ public class GameManager : MonoBehaviour
     void SpawnBlock()
     {
         GameObject newBlock = Instantiate(block, new Vector3(0, spawnPosition, 0), Quaternion.identity);
+        ChangeColor(newBlock);
         newBlock.SetActive(true);
         newBlock.transform.position = lastBlock.transform.position + Vector3.up;
-        newBlock.transform.localScale = lastBlock.transform.localScale;
+
+        if (isSizeUp)
+        {
+            newBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x * 1.1f, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z * 1.1f);
+            isSizeUp = false;
+            currentCombo = 0;
+        }
+        else
+            newBlock.transform.localScale = lastBlock.transform.localScale;
+
         if (spawnPosition % 2 == 0)
         {
             newBlock.GetComponent<BlockController>().currentState = MOVESTATE.MOVEX;
@@ -65,8 +100,6 @@ public class GameManager : MonoBehaviour
                        
             CutBlock();
 
-
-
             stackedBlock = lastBlock;
         }
         catch {
@@ -80,24 +113,27 @@ public class GameManager : MonoBehaviour
             float deltaX = stackedBlock.transform.position.x - lastBlock.transform.position.x;
             deltaX = Mathf.Abs(deltaX);
 
-            if (deltaX > error && deltaX < stackedBlock.transform.localScale.x )
+            if (deltaX > error*lastBlock.transform.localScale.x  && deltaX < stackedBlock.transform.localScale.x )
             {
+                currentCombo = 0;
                 float transCenter = (stackedBlock.transform.position.x + lastBlock.transform.position.x) / 2;
                 lastBlock.transform.position = new Vector3(transCenter, lastBlock.transform.position.y, lastBlock.transform.position.z);
                 lastBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x - deltaX, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z);
 
                 if (lastBlock.transform.position.x > 0)
                 {
-                    GameObject fallingBlock = Instantiate(block, new Vector3(transCenter + 1.5f, lastBlock.transform.position.y, lastBlock.transform.position.z),Quaternion.identity);
+                    GameObject fallingBlock = Instantiate(block, new Vector3(transCenter + stackedBlock.transform.localScale.x/2, lastBlock.transform.position.y, lastBlock.transform.position.z),Quaternion.identity);
+                    ChangeColor(fallingBlock);
                     fallingBlock.SetActive(true);
-                    fallingBlock.transform.localScale = new Vector3(3 - lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z);
+                    fallingBlock.transform.localScale = new Vector3(stackedBlock.transform.localScale.x - lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z);
                     fallingBlock.AddComponent<Rigidbody>();
                 }
                 else
                 {
-                    GameObject fallingBlock = Instantiate(block, new Vector3(transCenter - 1.5f, lastBlock.transform.position.y, lastBlock.transform.position.z), Quaternion.identity);
+                    GameObject fallingBlock = Instantiate(block, new Vector3(transCenter - stackedBlock.transform.localScale.x/2, lastBlock.transform.position.y, lastBlock.transform.position.z), Quaternion.identity);
+                    ChangeColor(fallingBlock);
                     fallingBlock.SetActive(true);
-                    fallingBlock.transform.localScale = new Vector3(3 - lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z);
+                    fallingBlock.transform.localScale = new Vector3(stackedBlock.transform.localScale.x - lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z);
                     fallingBlock.AddComponent<Rigidbody>();
                 }
 
@@ -108,10 +144,13 @@ public class GameManager : MonoBehaviour
                 isGameOver = true;
                 Debug.Log("GAME OVER!!");
             }
-            else if(deltaX <= error)
+            else if(deltaX <= error*lastBlock.transform.localScale.x)
             {
-                if(!isGameOver)
+                if (!isGameOver)
+                {
                     lastBlock.transform.position = stackedBlock.transform.position + Vector3.up;
+                    CheckCombo();
+                }
             }
 
         }
@@ -120,24 +159,27 @@ public class GameManager : MonoBehaviour
             float deltaZ = stackedBlock.transform.position.z - lastBlock.transform.position.z;
             deltaZ = Mathf.Abs(deltaZ);
 
-            if (deltaZ > error && deltaZ < stackedBlock.transform.localScale.z)
+            if (deltaZ > error*lastBlock.transform.localScale.z && deltaZ < stackedBlock.transform.localScale.z)
             {
+                currentCombo = 0;
                 float transCenter = (stackedBlock.transform.position.z + lastBlock.transform.position.z) / 2;
                 lastBlock.transform.position = new Vector3(lastBlock.transform.position.x, lastBlock.transform.position.y, transCenter);
                 lastBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, lastBlock.transform.localScale.z - deltaZ);
 
                 if (lastBlock.transform.position.z > 0)
                 {
-                    GameObject fallingBlock = Instantiate(block, new Vector3(lastBlock.transform.position.x, lastBlock.transform.position.y, transCenter + 1.5f), Quaternion.identity);
+                    GameObject fallingBlock = Instantiate(block, new Vector3(lastBlock.transform.position.x, lastBlock.transform.position.y, transCenter + stackedBlock.transform.localScale.z/2), Quaternion.identity);
+                    ChangeColor(fallingBlock);
                     fallingBlock.SetActive(true);
-                    fallingBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, 3-lastBlock.transform.localScale.z);
+                    fallingBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, stackedBlock.transform.localScale.z-lastBlock.transform.localScale.z);
                     fallingBlock.AddComponent<Rigidbody>();
                 }
                 else
                 {
-                    GameObject fallingBlock = Instantiate(block, new Vector3(lastBlock.transform.position.x, lastBlock.transform.position.y, transCenter - 1.5f), Quaternion.identity);
+                    GameObject fallingBlock = Instantiate(block, new Vector3(lastBlock.transform.position.x, lastBlock.transform.position.y, transCenter - stackedBlock.transform.localScale.z/2), Quaternion.identity);
+                    ChangeColor(fallingBlock);
                     fallingBlock.SetActive(true);
-                    fallingBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, 3- lastBlock.transform.localScale.z);
+                    fallingBlock.transform.localScale = new Vector3(lastBlock.transform.localScale.x, lastBlock.transform.localScale.y, stackedBlock.transform.localScale.z- lastBlock.transform.localScale.z);
                     fallingBlock.AddComponent<Rigidbody>();
                 }
 
@@ -148,14 +190,50 @@ public class GameManager : MonoBehaviour
                 isGameOver = true;
                 Debug.Log("GAME OVER!!");
             }
-            else if (deltaZ <= error)
+            else if (deltaZ <= error*lastBlock.transform.localScale.z)
             {
                 if (!isGameOver)
+                {
                     lastBlock.transform.position = stackedBlock.transform.position + Vector3.up;
+                    CheckCombo();
+                }
             }
         }
     }
 
+    void CheckCombo()
+    {
+        currentCombo++;
+        if(currentCombo >= 7)
+        {
+            isSizeUp = true;
+        }
+    }
+
+    Color RandomColor()
+    {
+        float r = Random.Range(100f, 200f) / 255f;
+        float g = Random.Range(100f, 200f) / 255f;
+        float b = Random.Range(100f, 200f) / 255f;
+
+        return new Color(r, g, b);
+    }
+
+    void ChangeColor(GameObject go)
+    {
+        Color applyColor = Color.Lerp(prevColor, nextColor, (score % 11) / 10f);
+        Renderer renderer = go.GetComponent<Renderer>();
+        renderer.material.color = applyColor;
+        Camera.main.backgroundColor = applyColor - new Color(0.1f, 0.1f, 0.1f);
+
+        if(applyColor.Equals(nextColor) == true)
+        {
+            prevColor = nextColor;
+            nextColor = RandomColor();
+        }
+
+    }
+    
 
 
 
